@@ -45,7 +45,7 @@ init () =
     ( { gameStage = Ready
       , gameState = Hangman.initGameState ""
       }
-    , Effect.sendCmd (Random.generate GotRandomWord randomWordGenerator)
+    , Effect.none
     )
 
 
