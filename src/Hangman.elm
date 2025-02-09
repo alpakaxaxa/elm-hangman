@@ -26,12 +26,8 @@ type alias GameStateModel =
 --  #InitGameState
 
 
-initGameState : GameState
-initGameState =
-    let
-        word =
-            "BABYGIRL"
-    in
+initGameState : String -> GameState
+initGameState word =
     GameState
         { word = word
         , guessedLetters = []
@@ -74,18 +70,12 @@ gameWord (GameState model) =
 
 isGameOver : GameState -> Bool
 isGameOver (GameState model) =
-    model.remainingAttempts < 0
+    model.remainingAttempts <= 0
 
 
 isGameWon : GameState -> Bool
 isGameWon (GameState model) =
-    -- Check if isGameOver is false
-    if isGameOver (GameState model) then
-        False
-
-    else
-        -- Check if all the letters in the word are guessed
-        List.all (\c -> List.member c model.guessedLetters) (String.toList model.word)
+    List.all (\c -> List.member c model.guessedLetters) (String.toList model.word)
 
 
 remainingAttempts : GameState -> Int

@@ -5,9 +5,13 @@ import Hangman
 import Html exposing (..)
 import Html.Attributes as Attr
 import Html.Events exposing (onClick)
+import List.Extra as ListExtra
+import Maybe exposing (withDefault)
 import Page exposing (Page)
+import Random
 import Route exposing (Route)
 import Shared
+import Task
 import View exposing (View)
 
 
@@ -19,6 +23,11 @@ page shared route =
         , subscriptions = subscriptions
         , view = view
         }
+
+
+sendMsg : msg -> Cmd msg
+sendMsg msg =
+    Task.perform (\_ -> msg) (Task.succeed ())
 
 
 
@@ -33,10 +42,10 @@ type alias Model =
 
 init : () -> ( Model, Effect Msg )
 init () =
-    ( { gameStage = StartingGame
-      , gameState = Hangman.initGameState
+    ( { gameStage = Ready
+      , gameState = Hangman.initGameState ""
       }
-    , Effect.none
+    , Effect.sendCmd (Random.generate GotRandomWord randomWordGenerator)
     )
 
 
@@ -45,13 +54,14 @@ init () =
 
 
 type GameStage
-    = StartingGame
+    = Ready
     | PlayingGame
     | GameOver
+    | GameWon
 
 
 type Msg
-    = NoOp
+    = GotRandomWord String
     | UserStartedGame
     | UserGuessed Char
 
@@ -59,13 +69,11 @@ type Msg
 update : Msg -> Model -> ( Model, Effect Msg )
 update msg model =
     case msg of
-        NoOp ->
-            ( model
-            , Effect.none
-            )
+        GotRandomWord word ->
+            ( { model | gameState = Hangman.initGameState word, gameStage = PlayingGame }, Effect.none )
 
         UserStartedGame ->
-            ( { model | gameStage = PlayingGame }, Effect.none )
+            ( { model | gameState = Hangman.initGameState (Hangman.gameWord model.gameState) }, Effect.sendCmd (Random.generate GotRandomWord randomWordGenerator) )
 
         UserGuessed letter ->
             let
@@ -73,7 +81,10 @@ update msg model =
                     Hangman.guessedLetter letter model.gameState
             in
             ( { gameStage =
-                    if Hangman.isGameOver updatedGameState then
+                    if Hangman.isGameWon updatedGameState then
+                        GameWon
+
+                    else if Hangman.isGameOver updatedGameState then
                         GameOver
 
                     else
@@ -100,7 +111,7 @@ subscriptions model =
 view : Model -> View Msg
 view model =
     case model.gameStage of
-        StartingGame ->
+        Ready ->
             { title = "Hangman"
             , body =
                 [ section
@@ -120,13 +131,7 @@ view model =
                                 [ Attr.class "subtitle"
                                 ]
                                 [ text "Guess the right letters and you will know the magic word" ]
-                            , div [ Attr.class "buttons" ]
-                                [ button
-                                    [ Attr.class "button is-success"
-                                    , onClick UserStartedGame
-                                    ]
-                                    [ text "Start the Game" ]
-                                ]
+                            , displayStartTheGameButton "Start the Game"
                             ]
                         ]
                     ]
@@ -161,15 +166,7 @@ view model =
                                 ]
                                 [ text "Guess the right letters and you will know the magic word" ]
                             , displayWord (Hangman.gameWord model.gameState) (Hangman.guessedLetters model.gameState)
-                            , if gameOver then
-                                if wordCompleted then
-                                    p [ Attr.class "has-text-success is-size-3" ] [ text "🎉 Congratulations! You won! 🎉" ]
-
-                                else
-                                    p [ Attr.class "has-text-danger is-size-3" ] [ text "💀 Game Over! Try Again! 💀" ]
-
-                              else
-                                displayLetterButtons (Hangman.guessedLetters model.gameState)
+                            , displayLetterButtons (Hangman.guessedLetters model.gameState)
                             , displayRemainingAttempts (Hangman.remainingAttempts model.gameState)
                             ]
                         ]
@@ -192,11 +189,41 @@ view model =
                             [ p
                                 [ Attr.class "title"
                                 ]
-                                [ text "You lost the game!" ]
+                                [ text "💀 Game Over! Try Again! 💀" ]
+                            , displayWord (Hangman.gameWord model.gameState) (Hangman.guessedLetters model.gameState)
                             , p
                                 [ Attr.class "subtitle"
                                 ]
                                 [ text "Press the button to start again" ]
+                            , displayStartTheGameButton "Play Again"
+                            ]
+                        ]
+                    ]
+                ]
+            }
+
+        GameWon ->
+            { title = "Hangman"
+            , body =
+                [ section
+                    [ Attr.class "hero is-fullheight"
+                    ]
+                    [ div
+                        [ Attr.class "hero-body"
+                        ]
+                        [ div
+                            [ Attr.class ""
+                            ]
+                            [ p
+                                [ Attr.class "title"
+                                ]
+                                [ text "🎉 Congratulations! You won! 🎉" ]
+                            , displayWord (Hangman.gameWord model.gameState) (Hangman.guessedLetters model.gameState)
+                            , p
+                                [ Attr.class "subtitle"
+                                ]
+                                [ text "Press the button to start again" ]
+                            , displayStartTheGameButton "Play Again"
                             ]
                         ]
                     ]
@@ -270,3 +297,33 @@ displayRemainingAttempts remainingAttempts =
     p
         [ Attr.class "is-size-4" ]
         [ text ("Remaining attempts: " ++ String.fromInt remainingAttempts) ]
+
+
+displayStartTheGameButton : String -> Html.Html Msg
+displayStartTheGameButton buttonCaption =
+    div [ Attr.class "buttons" ]
+        [ button
+            [ Attr.class "button is-success"
+            , onClick UserStartedGame
+            ]
+            [ text buttonCaption ]
+        ]
+
+
+
+-- RANDOM WORD GENERATOR
+
+
+wordsList : List String
+wordsList =
+    [ "BABYGIRL", "SEESTERN", "NERD" ]
+
+
+randomWordGenerator : Random.Generator String
+randomWordGenerator =
+    Random.int 0 (List.length wordsList - 1)
+        |> Random.map
+            (\index ->
+                ListExtra.getAt index wordsList
+                    |> withDefault "HELLO"
+            )
