@@ -1,6 +1,7 @@
 module Pages.Home_ exposing (Model, Msg, page)
 
 import Effect exposing (Effect)
+import Hangman
 import Html exposing (..)
 import Html.Attributes as Attr
 import Html.Events exposing (onClick)
@@ -25,17 +26,15 @@ page shared route =
 
 
 type alias Model =
-    { word : String
-    , guessedLetters : List Char
-    , remainingAttempts : Int
+    { gameStage : GameStage
+    , gameState : Hangman.GameState
     }
 
 
 init : () -> ( Model, Effect Msg )
 init () =
-    ( { word = "BABYGIRL"
-      , guessedLetters = []
-      , remainingAttempts = 7
+    ( { gameStage = StartingGame
+      , gameState = Hangman.initGameState
       }
     , Effect.none
     )
@@ -45,8 +44,15 @@ init () =
 -- UPDATE
 
 
+type GameStage
+    = StartingGame
+    | PlayingGame
+    | GameOver
+
+
 type Msg
     = NoOp
+    | UserStartedGame
     | UserGuessed Char
 
 
@@ -58,10 +64,21 @@ update msg model =
             , Effect.none
             )
 
+        UserStartedGame ->
+            ( { model | gameStage = PlayingGame }, Effect.none )
+
         UserGuessed letter ->
-            ( { model
-                | guessedLetters = letter :: model.guessedLetters
-                , remainingAttempts = model.remainingAttempts - 1
+            let
+                updatedGameState =
+                    Hangman.guessedLetter letter model.gameState
+            in
+            ( { gameStage =
+                    if Hangman.isGameOver updatedGameState then
+                        GameOver
+
+                    else
+                        PlayingGame
+              , gameState = Hangman.guessedLetter letter model.gameState
               }
             , Effect.none
             )
@@ -82,48 +99,109 @@ subscriptions model =
 
 view : Model -> View Msg
 view model =
-    let
-        wordCompleted =
-            List.all (\c -> List.member c model.guessedLetters) (String.toList model.word)
-
-        gameOver =
-            model.remainingAttempts == 0
-    in
-    { title = "Pages.Hangman"
-    , body =
-        [ section
-            [ Attr.class "hero is-fullheight"
-            ]
-            [ div
-                [ Attr.class "hero-body"
-                ]
-                [ div
-                    [ Attr.class ""
+    case model.gameStage of
+        StartingGame ->
+            { title = "Hangman"
+            , body =
+                [ section
+                    [ Attr.class "hero is-fullheight"
                     ]
-                    [ p
-                        [ Attr.class "title"
+                    [ div
+                        [ Attr.class "hero-body"
                         ]
-                        [ text "Hangman for Angie P." ]
-                    , p
-                        [ Attr.class "subtitle"
+                        [ div
+                            [ Attr.class ""
+                            ]
+                            [ p
+                                [ Attr.class "title"
+                                ]
+                                [ text "Hangman for Angie P." ]
+                            , p
+                                [ Attr.class "subtitle"
+                                ]
+                                [ text "Guess the right letters and you will know the magic word" ]
+                            , div [ Attr.class "buttons" ]
+                                [ button
+                                    [ Attr.class "button is-success"
+                                    , onClick UserStartedGame
+                                    ]
+                                    [ text "Start the Game" ]
+                                ]
+                            ]
                         ]
-                        [ text "Guess the right letters and you will know the magic word" ]
-                    , displayWord model.word model.guessedLetters
-                    , if gameOver then
-                        if wordCompleted then
-                            p [ Attr.class "has-text-success is-size-3" ] [ text "🎉 Congratulations! You won! 🎉" ]
-
-                        else
-                            p [ Attr.class "has-text-danger is-size-3" ] [ text "💀 Game Over! Try Again! 💀" ]
-
-                      else
-                        displayLetterButtons model.guessedLetters
-                    , displayRemainingAttempts model.remainingAttempts
                     ]
                 ]
-            ]
-        ]
-    }
+            }
+
+        PlayingGame ->
+            let
+                gameOver =
+                    Hangman.isGameOver model.gameState
+
+                wordCompleted =
+                    Hangman.isGameWon model.gameState
+            in
+            { title = "Hangman"
+            , body =
+                [ section
+                    [ Attr.class "hero is-fullheight"
+                    ]
+                    [ div
+                        [ Attr.class "hero-body"
+                        ]
+                        [ div
+                            [ Attr.class ""
+                            ]
+                            [ p
+                                [ Attr.class "title"
+                                ]
+                                [ text "Hangman for Angie P." ]
+                            , p
+                                [ Attr.class "subtitle"
+                                ]
+                                [ text "Guess the right letters and you will know the magic word" ]
+                            , displayWord (Hangman.gameWord model.gameState) (Hangman.guessedLetters model.gameState)
+                            , if gameOver then
+                                if wordCompleted then
+                                    p [ Attr.class "has-text-success is-size-3" ] [ text "🎉 Congratulations! You won! 🎉" ]
+
+                                else
+                                    p [ Attr.class "has-text-danger is-size-3" ] [ text "💀 Game Over! Try Again! 💀" ]
+
+                              else
+                                displayLetterButtons (Hangman.guessedLetters model.gameState)
+                            , displayRemainingAttempts (Hangman.remainingAttempts model.gameState)
+                            ]
+                        ]
+                    ]
+                ]
+            }
+
+        GameOver ->
+            { title = "Hangman"
+            , body =
+                [ section
+                    [ Attr.class "hero is-fullheight"
+                    ]
+                    [ div
+                        [ Attr.class "hero-body"
+                        ]
+                        [ div
+                            [ Attr.class ""
+                            ]
+                            [ p
+                                [ Attr.class "title"
+                                ]
+                                [ text "You lost the game!" ]
+                            , p
+                                [ Attr.class "subtitle"
+                                ]
+                                [ text "Press the button to start again" ]
+                            ]
+                        ]
+                    ]
+                ]
+            }
 
 
 alphabet : String
